@@ -44,6 +44,9 @@ end
 
 def die(*args)
   info(*args)
+
+  cleanup
+
   exit 255
 end
 
@@ -66,7 +69,7 @@ def daemon
     printf "SSH_AGENT_PID=%d; export SSH_AGENT_PID;\n", pid
   end
 
-  printf "Agent pid %d;\n", pid
+  printf "echo Agent pid %d;\n", pid
 
   Dir::chdir("/")
   File::umask(0)
@@ -87,7 +90,7 @@ class SSHAuth
         sock.close
       end
     else
-      last_error = Errno::ENOENT
+      last_error = nil
 
       sock_path_list.each { |path|
         debug "Trying: %s", path
@@ -99,7 +102,11 @@ class SSHAuth
         end
       }
 
-      raise e
+      if last_error.nil?
+        raise 'No agent socket available'
+      else
+        raise last_error
+      end
     end
   end
 
@@ -107,6 +114,8 @@ class SSHAuth
     list = []
 
     env = ENV['SSH_AUTH_SOCK']
+
+    env = nil if env == sock_file()
 
     list.push(env) if env
 
@@ -127,33 +136,39 @@ class SSHAuth
   def proxy(accept_sock)
     open { |client_sock|
       loop {
-        r, w, e = IO.select([client_sock, accept_sock], nil, [client_sock, accept_sock], 1)
+        reads, writes, errors = IO.select([client_sock, accept_sock],
+                                          nil,
+                                          [client_sock, accept_sock], 1)
 
-        if !e.empty?
-          debug "Socket error"
-          break
+        if !errors.nil?
+          if !errors.empty?
+            debug "Socket error"
+            break
+          end
         end
 
         eof = false
 
-        r.each { |s|
-          buf, = s.recvfrom(4096)
+        if !reads.nil?
+          reads.each { |s|
+            buf, = s.recvfrom(4096)
 
-          if buf.empty?
-            eof = true
-            next
-          end
+            if buf.empty?
+              eof = true
+              next
+            end
 
-          debug "Data: %s", buf.inspect
+            debug "Data: %s", buf.inspect
 
-          if s == accept_sock
-            client_sock.send(buf, 0)
-          else
-            accept_sock.send(buf, 0)
-          end
-        }
+            if s == accept_sock
+              client_sock.send(buf, 0)
+            else
+              accept_sock.send(buf, 0)
+            end
+          }
 
-        break if eof
+          break if eof
+        end
       }
     }
   end
@@ -184,6 +199,9 @@ class SSHAuthServer
       Thread.start(@listen_sock.accept) { |accept_sock|
         begin
           yield accept_sock
+        rescue => e
+          debug "#{e}"
+          raise e
         ensure
           accept_sock.close
         end
