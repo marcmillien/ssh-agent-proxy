@@ -56,6 +56,18 @@ def daemon
 
   fork and exit!(0)
 
+  pid = Process.pid
+
+  if $csh
+    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file()
+    printf "setenv SSH_AGENT_PID %d;\n", pid
+  else
+    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file()
+    printf "SSH_AGENT_PID=%d; export SSH_AGENT_PID;\n", pid
+  end
+
+  printf "Agent pid %d;\n", pid
+
   Dir::chdir("/")
   File::umask(0)
 
@@ -99,7 +111,12 @@ class SSHAuth
     list.push(env) if env
 
     list.concat Dir.glob("/tmp/ssh-*/agent.*").select { |path|
-      File.readable?(path) && path != env
+      if path == env
+        false
+      else
+        stat = File.stat(path)
+        stat.socket? && stat.readable?
+      end
     }.sort { |a, b|
       File.mtime(a) <=> File.mtime(b)
     }
@@ -261,9 +278,31 @@ def main
 
   OptionParser.new { |opt|
     kill = false
+    $csh = false
 
-    opt.on('-D', 'Turn on debug mode') { |v| $debug = v }
-    opt.on('-k', 'Kill the agent') { |v| kill = v }
+    if shell = ENV['SHELL']
+      $csh = shell.match(/csh$/)
+    end
+
+    opt.summary_width = 16
+    opt.on('-a SOCK', 'Set the socket path (%d is replaced with UID)') { |v|
+      $sock_file_template = v
+    }
+    opt.on('-c', 'Generate C-shell commands on stdout') { |v|
+      $csh = v
+    }
+    opt.on('-d', 'Turn on debug mode') { |v|
+      $debug = v
+    }
+    opt.on('-k', 'Kill the agent proxy, and remove the pid file and socket') { |v|
+      kill = v
+    }
+    opt.on('-s', 'Generate Bourne shell commands on stdout') { |v|
+      $csh = !v
+    }
+    opt.on('-p FILE', 'Set the pid file path (%d is replaced with UID)') { |v|
+      $pid_file_template = v
+    }
 
     opt.parse!(ARGV)
 
