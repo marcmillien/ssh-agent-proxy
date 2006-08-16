@@ -59,18 +59,6 @@ def daemon
 
   fork and exit!(0)
 
-  pid = Process.pid
-
-  if $csh
-    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file()
-    printf "setenv SSH_AGENT_PID %d;\n", pid
-  else
-    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file()
-    printf "SSH_AGENT_PID=%d; export SSH_AGENT_PID;\n", pid
-  end
-
-  printf "echo Agent pid %d;\n", pid
-
   Dir::chdir("/")
   File::umask(0)
 
@@ -191,6 +179,7 @@ class SSHAuthServer
 
     @listen_sock = UNIXServer.open(path)
   rescue => e
+    $no_cleanup = true
     raise RuntimeError, "Cannot create a server socket: #{e}"
   end
 
@@ -218,9 +207,15 @@ end
 def setup_global_variables
   $sock_file_template = "/tmp/ssh%d/agent.sock"
   $pid_file_template  = "/tmp/ssh%d/agent.pid"
+
+  $debug              = false
+  $csh                = false
+  $no_cleanup         = false
 end
 
 def cleanup
+  return if $no_cleanup
+
   [sock_file(), pid_file()].each { |path|
     dir, file = File.split(path)
 
@@ -276,6 +271,12 @@ def daemon_main
   auth  = SSHAuth.new
   proxy = SSHAuthServer.new(sock_file())
 
+  if $csh
+    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file()
+  else
+    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file()
+  end
+
   daemon()
 
   debug "PID: %d", Process.pid
@@ -296,7 +297,6 @@ def main
 
   OptionParser.new { |opt|
     kill = false
-    $csh = false
 
     if shell = ENV['SHELL']
       $csh = shell.match(/csh$/)
