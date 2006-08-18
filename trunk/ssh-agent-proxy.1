@@ -37,7 +37,8 @@ process and all its child processes will now have a useless
 .Ev SSH_AUTH_SOCK
 value set.  If you reattach the saved session later from a new ssh
 connection, agent forwarding will not work unless you fix the value
-for the processes.
+for the processes that run
+.Xr ssh 1 .
 .Pp
 Here is what
 .Nm
@@ -45,7 +46,7 @@ is for.  As the search for an available agent socket is dynamic and
 the path of the socket that this command creates is fixed, there is no
 need to worry about the
 .Ev SSH_AUTH_SOCK
-value.  You only need to have a fixed value set to
+value any more.  You only need to have a fixed value set to
 .Ev SSH_AUTH_SOCK ,
 then agent forwarding will always work fine.
 .Pp
@@ -104,6 +105,7 @@ Default location of the proxy agent socket.
 The primary candidate in agent sockets to try.
 .El
 .Sh SEE ALSO
+.Xr ssh 1
 .Xr ssh-agent 1
 .Sh AUTHORS
 .An Akinori MUSHA Aq knu@iDaemons.org

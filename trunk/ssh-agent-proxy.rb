@@ -148,7 +148,7 @@ class SSHAuth
 
             debug "Data: %s", buf.inspect
 
-            if s == accept_sock
+            if s.equal?(accept_sock)
               client_sock.send(buf, 0)
             else
               accept_sock.send(buf, 0)
@@ -170,7 +170,7 @@ class SSHAuthServer
       stat = File.stat(dir)
 
       if stat.directory? && (stat.mode & 0077) != 0
-        info "Fixing permissions: " + path;
+        info "Fixing permissions: " + path
         File.chmod(0700, dir)
       end
     rescue Errno::ENOENT => e
