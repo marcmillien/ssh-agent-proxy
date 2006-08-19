@@ -50,6 +50,19 @@ value any more.  You only need to have a fixed value set to
 .Ev SSH_AUTH_SOCK ,
 then agent forwarding will always work fine.
 .Pp
+Just as
+.Xr ssh-agent 1
+does,
+.Cm
+prints shell commands that can be evaluated in the calling shell to
+set the
+.Ev SSH_AUTH_SOCK
+variable.  When
+.Cm
+finds an instance already running, it does not fork a new daemon but
+prints shell commands anyway so that the running shell can use the
+running instance.
+.Pp
 .Sh OPTIONS
 The following command line arguments are supported:
 .Pp
