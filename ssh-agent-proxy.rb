@@ -48,7 +48,7 @@ def notice(message)
 end
 
 def info(message)
-  puts "echo " + shellescape("#{$0}: #{message}") + ";"
+  puts "echo " + shellescape("#{$0}: #{message}") + ";" unless $quiet
 end
 
 def die(message)
@@ -227,6 +227,7 @@ def setup_global_variables
   $debug              = false
   $csh                = false
   $no_cleanup         = false
+  $quiet              = false
 end
 
 def cleanup
@@ -345,6 +346,9 @@ def main
     }
     opt.on('-k', 'Kill the agent proxy, and remove the pid file and socket') { |v|
       kill = v
+    }
+    opt.on('-q', 'Suppress informational messages') { |v|
+      $quiet = v
     }
     opt.on('-s', 'Generate Bourne shell commands on stdout') { |v|
       $csh = !v
