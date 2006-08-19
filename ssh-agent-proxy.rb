@@ -34,16 +34,25 @@ require 'optparse'
 require 'socket'
 require 'thread'
 
-def debug(*args)
-  info(*args) if $debug
+def shellescape(str)
+  return str.gsub(/([^A-Za-z0-9_\-.,:\/@])/on, "\\\\\\1")
 end
 
-def info(*args)
-  STDERR.puts "#{$0}: " + sprintf(*args)
+def debug(message)
+  notice(message) if $debug
 end
 
-def die(*args)
-  info(*args)
+# Note that output to stdout may be passed to shell
+def notice(message)
+  STDERR.puts "#{$0}: #{message}"
+end
+
+def info(message)
+  puts "echo " + shellescape("#{$0}: #{message}") + ";"
+end
+
+def die(message)
+  notice(message)
 
   cleanup
 
@@ -81,7 +90,7 @@ class SSHAuth
       last_error = nil
 
       sock_path_list.each { |path|
-        debug "Trying: %s", path
+        debug "Trying: " + path
         begin
           return UNIXSocket.open(path)
         rescue => e
@@ -99,24 +108,19 @@ class SSHAuth
   end
 
   def sock_path_list
-    list = []
-
-    env = ENV['SSH_AUTH_SOCK']
-
-    env = nil if env == sock_file()
-
-    list.push(env) if env
-
-    list.concat Dir.glob("/tmp/ssh-*/agent.*").select { |path|
-      if path == env
-        false
-      else
-        stat = File.stat(path)
-        stat.socket? && stat.readable?
-      end
-    }.sort { |a, b|
+    list = Dir.glob("/tmp/ssh-*/agent.*").sort { |a, b|
+      # ORDER BY mtime DESC
       File.mtime(a) <=> File.mtime(b)
     }
+
+    if env = ENV['SSH_AUTH_SOCK']
+      # use the env as the first candidate
+      list.delete(env)
+      list.unshift(env)
+    end
+
+    # never recurse itself
+    list.delete(sock_file())
 
     return list
   end
@@ -146,7 +150,7 @@ class SSHAuth
               next
             end
 
-            debug "Data: %s", buf.inspect
+            debug "Data: " + buf.inspect
 
             if s.equal?(accept_sock)
               client_sock.send(buf, 0)
@@ -170,7 +174,7 @@ class SSHAuthServer
       stat = File.stat(dir)
 
       if stat.directory? && (stat.mode & 0077) != 0
-        info "Fixing permissions: " + path
+        notice "Fixing permissions: " + path
         File.chmod(0700, dir)
       end
     rescue Errno::ENOENT => e
@@ -178,9 +182,21 @@ class SSHAuthServer
     end
 
     @listen_sock = UNIXServer.open(path)
-  rescue => e
-    $no_cleanup = true
-    raise RuntimeError, "Cannot create a server socket: #{e}"
+  rescue Errno::EADDRINUSE => e
+    begin
+      # test if the existing socket is working
+      sock = UNIXSocket.open(path)
+      sock.close
+    rescue => e
+      notice "Removing a dead socket in the way"
+      File.unlink(path)
+
+      # The socket having been unlinked, EADDRINUSE shall no longer be raised.
+      @listen_sock = UNIXServer.open(path)
+      return
+    end
+
+    raise Errno::EADDRINUSE
   end
 
   def each
@@ -189,7 +205,7 @@ class SSHAuthServer
         begin
           yield accept_sock
         rescue => e
-          debug "#{e}"
+          debug e.message
           raise e
         ensure
           accept_sock.close
@@ -267,19 +283,34 @@ rescue => e
   return nil
 end
 
-def daemon_main
-  auth  = SSHAuth.new
-  proxy = SSHAuthServer.new(sock_file())
-
+def print_env
   if $csh
-    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file()
+    printf "setenv SSH_AUTH_SOCK %s;\n", shellescape(sock_file())
   else
-    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file()
+    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", shellescape(sock_file())
   end
+end
+
+def daemon_main
+  auth = SSHAuth.new
+
+  begin
+    proxy = SSHAuthServer.new(sock_file())
+  rescue Errno::EADDRINUSE => e
+    info "Agent already running"
+
+    print_env
+    exit
+  rescue => e
+    $no_cleanup = true
+    raise "Cannot create a server socket: #{e}"
+  end
+
+  print_env
 
   daemon()
 
-  debug "PID: %d", Process.pid
+  debug "PID: %d" % Process.pid
 
   create_pid_file
 
@@ -329,10 +360,10 @@ def main
         begin
           Process.kill(:SIGTERM, pid)
         rescue => e
-          info "#{e}"
+          die e.message
         end
       else
-        info "Cannot read pid file: %s" % pid_file()
+        die "Cannot read pid file: " + pid_file()
       end
 
       cleanup
@@ -343,7 +374,7 @@ def main
 
   daemon_main
 rescue => e
-  die "#{e}"
+  die e.message
 end
 
 main()
