@@ -1,0 +1,129 @@
+.\" $Id$
+.\"
+.Dd August 16, 2006
+.Dt SSH-AGENT-PROXY 1
+.Os FreeBSD
+.Sh NAME
+.Nm ssh-agent-proxy
+.Nd a dynamic proxy for
+.Xr ssh-agent 1
+.Sh SYNOPSIS
+.Nm
+.Op Fl cdkqs
+.Op Fl a Ar SOCK
+.Op Fl p Ar FILE
+.Sh DESCRIPTION
+The
+.Nm
+command is a
+.Sq dynamic
+proxy for
+.Xr ssh-agent 1 ,
+which itself acts as an ssh authentication agent that forwards
+requests to a real agent.  For each client request, it determines the
+.Sq real
+agent by testing all available unix-domain sockets located in
+.Pa /tmp/ssh-XXXXXXXXXX/agent.<ppid>
+one by one.
+.Pp
+This is especially useful when you use
+.Xr screen 1
+and agent forwarding.  Suppose you log in to a remote host with ssh
+agent forwarding enabled, then run
+.Xr screen 1 ,
+and detach a session.  The
+.Xr screen 1
+process and all its child processes will now have a useless
+.Ev SSH_AUTH_SOCK
+value set.  If you reattach the saved session later from a new ssh
+connection, agent forwarding will not work unless you fix the value
+for the processes that run
+.Xr ssh 1 .
+.Pp
+Here is what
+.Nm
+is for.  As the search for an available agent socket is dynamic and
+the path of the socket that this command creates is fixed, there is no
+need to worry about the
+.Ev SSH_AUTH_SOCK
+value any more.  You only need to have a fixed value set to
+.Ev SSH_AUTH_SOCK ,
+then agent forwarding will always work fine.
+.Pp
+Just as
+.Xr ssh-agent 1
+does,
+.Cm
+prints shell commands that can be evaluated in the calling shell to
+set the
+.Ev SSH_AUTH_SOCK
+variable.  When
+.Cm
+finds an instance already running, it does not fork a new daemon but
+prints shell commands anyway so that the running shell can use the
+running instance.
+.Pp
+.Sh OPTIONS
+The following command line arguments are supported:
+.Pp
+.Bl -tag -compact
+.It Fl h
+.It Fl -help
+Show help and exit.
+.Pp
+.It Fl a Ar SOCK
+Alter the proxy agent socket path. The default value is
+.Pa /tmp/ssh%d/agent.sock ,
+where the
+.Cm %d
+is replaced with the user ID.
+.Pp
+.It Fl c
+Generate C-shell commands on stdout.  This is the default if
+.Ev SHELL
+looks like it's a csh style of shell.
+.Pp
+.It Fl d
+Turn on debug mode.  When this option is specified,
+.Nm
+will not go background.
+.Pp
+.It Fl k
+Kill the proxy agent according to the process ID recorded in the pid
+file.
+.Pp
+.It Fl p Ar FILE
+Alter the pid file path.  The default value is
+.Pa /tmp/ssh%d/agent.pid ,
+where the
+.Cm %d
+is replaced with the user ID.
+.Pp
+.It Fl q
+Supress informational messages.
+.Pp
+.It Fl s
+Generate Bourne shell commands on stdout.  This is the default if
+.Ev SHELL
+does not look like it's a csh style of shell.
+.El
+.Sh FILES
+.Bl -tag -width "/tmp/ssh%d/agent.sock"
+.It Pa /tmp/ssh%d/agent.pid
+Default location of the pid file.
+.Pp
+.It Pa /tmp/ssh%d/agent.sock
+Default location of the proxy agent socket.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width "SSH_AUTH_SOCK" -compact
+.It Ev SSH_AUTH_SOCK
+The primary candidate in agent sockets to try.
+.El
+.Sh SEE ALSO
+.Xr ssh 1
+.Xr ssh-agent 1
+.Sh AUTHORS
+.An Akinori MUSHA Aq knu@iDaemons.org
+.Sh BUGS
+There may be.  Use at your own risk.
