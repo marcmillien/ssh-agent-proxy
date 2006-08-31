@@ -108,9 +108,9 @@ class SSHAuth
   end
 
   def sock_path_list
-    list = Dir.glob("/tmp/ssh-*/agent.*").sort { |a, b|
+    list = Dir.glob("/tmp/ssh-*/agent.*").sort_by { |i|
       # ORDER BY mtime DESC
-      File.mtime(a) <=> File.mtime(b)
+      -File.mtime(i).to_f
     }
 
     if env = ENV['SSH_AUTH_SOCK']
