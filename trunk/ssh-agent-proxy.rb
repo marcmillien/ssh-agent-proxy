@@ -95,6 +95,7 @@ class SSHAuth
           return UNIXSocket.open(path)
         rescue => e
           debug "Failed"
+          File.chmod(0200, path) rescue nil
           last_error = e
         end
       }
