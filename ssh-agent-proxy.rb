@@ -108,10 +108,15 @@ class SSHAuth
   end
 
   def sock_path_list
-    list = Dir.glob("/tmp/ssh-*/agent.*").sort_by { |i|
+    list = []
+
+    # SSHKeychain (Mac OS X)
+    list << '/tmp/%d/SSHKeychain.socket' % Process.uid
+
+    list.concat(Dir.glob("/tmp/ssh-*/agent.*").sort_by { |i|
       # ORDER BY mtime DESC
       -File.mtime(i).to_f
-    }
+    })
 
     if env = ENV['SSH_AUTH_SOCK']
       # use the env as the first candidate
