@@ -92,7 +92,11 @@ class SSHAuth
       sock_path_list.each { |path|
         debug "Trying: " + path
         begin
-          return UNIXSocket.open(path)
+          stat = File.stat(path)
+          
+          if stat.socket? && stat.readable?
+            return UNIXSocket.open(path)
+          end
         rescue => e
           debug "Failed"
           File.chmod(0200, path) rescue nil
