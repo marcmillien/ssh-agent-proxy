@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # -*- ruby -*-
 #
-# Copyright (c) 2006 Akinori MUSHA
+# Copyright (c) 2006, 2008 Akinori MUSHA
 #
 # All rights reserved.
 #
@@ -115,7 +115,13 @@ class SSHAuth
   def sock_path_list
     list = []
 
-    # SSHKeychain (Mac OS X)
+    # Socket opened by launchd(8) (for Mac OS X 10.5+)
+    if File.executable?('/bin/launchctl')
+      env = `/bin/launchctl getenv SSH_AUTH_SOCK 2>/dev/null`.chomp
+      list << env unless env.empty?
+    end
+
+    # SSHKeychain (for Mac OS X)
     list << '/tmp/%d/SSHKeychain.socket' % Process.uid
 
     list.concat(Dir.glob("/tmp/ssh-*/agent.*").sort_by { |i|

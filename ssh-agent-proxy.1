@@ -22,9 +22,8 @@ proxy for
 which itself acts as an ssh authentication agent that forwards
 requests to a real agent.  For each client request, it determines the
 .Sq real
-agent by testing all available unix-domain sockets located in
-.Pa /tmp/ssh-XXXXXXXXXX/agent.<ppid>
-one by one.
+agent by testing all available unix-domain sockets presumably opened
+by ssh-agents one by one.
 .Pp
 This is especially useful when you use
 .Xr screen 1
@@ -114,15 +113,33 @@ Default location of the pid file.
 .Pp
 .It Pa /tmp/ssh%d/agent.sock
 Default location of the proxy agent socket.
+.Pp
+.It Pa /tmp/ssh-XXXXXXXXXX/agent.<ppid>
+Candidates for agent sockets to try.
+.Pp
+.It Pa /tmp/<pid>/SSHKeychain.socket
+A candidate for agent sockets to try.  This is for SSHKeychain on Mac
+OS X.
 .El
 .Sh ENVIRONMENT
 .Bl -tag -width "SSH_AUTH_SOCK" -compact
 .It Ev SSH_AUTH_SOCK
-The primary candidate in agent sockets to try.
+The primary candidate for agent sockets to try.
+.Pp
+.Nm
+also tries running
+.Xr launchctl 1
+to get the socket opened by
+.Xr launchd 8
+via the
+.Sq getenv
+command if available.  This is for Mac OS X 10.5+ environment.
 .El
 .Sh SEE ALSO
-.Xr ssh 1
-.Xr ssh-agent 1
+.Xr launchctl 1 ,
+.Xr ssh 1 ,
+.Xr ssh-agent 1 ,
+.Xr launchd 8
 .Sh AUTHORS
 .An Akinori MUSHA Aq knu@iDaemons.org
 .Sh BUGS
