@@ -61,6 +61,15 @@ variable.  When
 finds an instance already running, it does not fork a new daemon but
 prints shell commands anyway so that the running shell can use the
 running instance.
+.PP
+.Nm
+also tries running
+.Xr launchctl 1
+to get the socket opened by
+.Xr launchd 8
+via the
+.Sq getenv
+command if available.  This is for Mac OS X 10.5+ environment.
 .Pp
 .Sh OPTIONS
 The following command line arguments are supported:
@@ -120,20 +129,6 @@ Candidates for agent sockets to try.
 .It Pa /tmp/<pid>/SSHKeychain.socket
 A candidate for agent sockets to try.  This is for SSHKeychain on Mac
 OS X.
-.El
-.Sh ENVIRONMENT
-.Bl -tag -width "SSH_AUTH_SOCK" -compact
-.It Ev SSH_AUTH_SOCK
-The primary candidate for agent sockets to try.
-.Pp
-.Nm
-also tries running
-.Xr launchctl 1
-to get the socket opened by
-.Xr launchd 8
-via the
-.Sq getenv
-command if available.  This is for Mac OS X 10.5+ environment.
 .El
 .Sh SEE ALSO
 .Xr launchctl 1 ,

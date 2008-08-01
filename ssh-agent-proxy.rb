@@ -129,12 +129,6 @@ class SSHAuth
       -File.mtime(i).to_f
     })
 
-    if env = ENV['SSH_AUTH_SOCK']
-      # use the env as the first candidate
-      list.delete(env)
-      list.unshift(env)
-    end
-
     # never recurse itself
     list.delete(sock_file())
 
