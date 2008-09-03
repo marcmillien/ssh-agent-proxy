@@ -33,9 +33,95 @@ $0 = $0
 require 'optparse'
 require 'socket'
 require 'thread'
+require 'shellwords'
 
-def shellescape(str)
-  return str.gsub(/([^A-Za-z0-9_\-.,:\/@])/on, "\\\\\\1")
+def main
+  setup
+
+  OptionParser.new { |opt|
+    kill = false
+
+    if shell = ENV['SHELL']
+      $csh = shell.match(/csh$/)
+    end
+
+    opt.summary_width = 16
+    opt.on('-a SOCK', 'Set the socket path (%d is replaced with UID)') { |v|
+      $sock_file_template = v
+    }
+    opt.on('-c', 'Generate C-shell commands on stdout') { |v|
+      $csh = v
+    }
+    opt.on('-d', 'Turn on debug mode') { |v|
+      $debug = v
+    }
+    opt.on('-k', 'Kill the agent proxy, and remove the pid file and socket') { |v|
+      kill = v
+    }
+    opt.on('-q', 'Suppress informational messages') { |v|
+      $quiet = v
+    }
+    opt.on('-s', 'Generate Bourne shell commands on stdout') { |v|
+      $csh = !v
+    }
+    opt.on('-p FILE', 'Set the pid file path (%d is replaced with UID)') { |v|
+      $pid_file_template = v
+    }
+
+    opt.parse!(ARGV)
+
+    if kill
+      if pid = read_pid_file()
+        begin
+          Process.kill(:SIGTERM, pid)
+        rescue => e
+          die e.message
+        end
+      else
+        die "Cannot read pid file: " + pid_file()
+      end
+
+      cleanup
+
+      exit
+    end
+  }
+
+  daemon_main
+rescue => e
+  die e.message
+end
+
+def daemon_main
+  auth = SSHAuth.new
+
+  begin
+    proxy = SSHAuthServer.new(sock_file())
+  rescue Errno::EADDRINUSE => e
+    print_info "Agent already running"
+
+    print_env
+    exit
+  rescue => e
+    $no_cleanup = true
+    raise "Cannot create a server socket: #{e}"
+  end
+
+  print_env
+
+  daemon()
+
+  debug "PID: %d" % Process.pid
+
+  create_pid_file
+
+  proxy.each { |accept_sock|
+    debug "Connected"
+
+    auth.proxy(accept_sock)
+
+    debug "Disconnected"
+  }
 end
 
 def debug(message)
@@ -47,8 +133,8 @@ def notice(message)
   STDERR.puts "#{$0}: #{message}"
 end
 
-def info(message)
-  puts "echo " + shellescape("#{$0}: #{message}") + ";" unless $quiet
+def print_info(message)
+  puts "echo " + "#{$0}: #{message}".shellescape + ";" unless $quiet
 end
 
 def die(message)
@@ -60,20 +146,8 @@ def die(message)
 end
 
 def daemon
-  return if $debug
-
-  fork and exit!(0)
-
-  Process::setsid
-
-  fork and exit!(0)
-
-  Dir::chdir("/")
-  File::umask(0)
-
-  STDIN.reopen("/dev/null")
-  STDOUT.reopen("/dev/null", "w")
-  STDERR.reopen("/dev/null", "w")
+  Process.daemon unless $debug
+  File.umask(0)
 end
 
 class SSHAuth
@@ -296,99 +370,47 @@ end
 
 def print_env
   if $csh
-    printf "setenv SSH_AUTH_SOCK %s;\n", shellescape(sock_file())
+    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file().shellescape
   else
-    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", shellescape(sock_file())
+    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file().shellescape
   end
 end
 
-def daemon_main
-  auth = SSHAuth.new
+class String
+  def shellescape
+    # An empty argument will be skipped, so return empty quotes.
+    return "''" if empty?
 
-  begin
-    proxy = SSHAuthServer.new(sock_file())
-  rescue Errno::EADDRINUSE => e
-    info "Agent already running"
+    str = dup
 
-    print_env
-    exit
-  rescue => e
-    $no_cleanup = true
-    raise "Cannot create a server socket: #{e}"
-  end
+    # Process as a single byte sequence because not all shell
+    # implementations are multibyte aware.
+    str.gsub!(/([^A-Za-z0-9_\-.,:\/@\n])/n, "\\\\\\1")
 
-  print_env
+    # A LF cannot be escaped with a backslash because a backslash + LF
+    # combo is regarded as line continuation and simply ignored.
+    str.gsub!(/\n/, "'\n'")
 
-  daemon()
-
-  debug "PID: %d" % Process.pid
-
-  create_pid_file
-
-  proxy.each { |accept_sock|
-    debug "Connected"
-
-    auth.proxy(accept_sock)
-
-    debug "Disconnected"
-  }
+    return str
+  end unless method_defined?(:shellescape)
 end
 
-def main
-  setup
+module Process
+  class << self
+    def daemon(nochdir = nil, noclose = nil)
+      fork and exit!(0)
+      fork and exit!(0)
 
-  OptionParser.new { |opt|
-    kill = false
+      Process.setsid
+      Dir.chdir("/") unless nochdir
 
-    if shell = ENV['SHELL']
-      $csh = shell.match(/csh$/)
-    end
-
-    opt.summary_width = 16
-    opt.on('-a SOCK', 'Set the socket path (%d is replaced with UID)') { |v|
-      $sock_file_template = v
-    }
-    opt.on('-c', 'Generate C-shell commands on stdout') { |v|
-      $csh = v
-    }
-    opt.on('-d', 'Turn on debug mode') { |v|
-      $debug = v
-    }
-    opt.on('-k', 'Kill the agent proxy, and remove the pid file and socket') { |v|
-      kill = v
-    }
-    opt.on('-q', 'Suppress informational messages') { |v|
-      $quiet = v
-    }
-    opt.on('-s', 'Generate Bourne shell commands on stdout') { |v|
-      $csh = !v
-    }
-    opt.on('-p FILE', 'Set the pid file path (%d is replaced with UID)') { |v|
-      $pid_file_template = v
-    }
-
-    opt.parse!(ARGV)
-
-    if kill
-      if pid = read_pid_file()
-        begin
-          Process.kill(:SIGTERM, pid)
-        rescue => e
-          die e.message
-        end
-      else
-        die "Cannot read pid file: " + pid_file()
+      unless noclose
+        STDIN.reopen("/dev/null")
+        STDOUT.reopen("/dev/null", "w")
+        STDERR.reopen("/dev/null", "w")
       end
-
-      cleanup
-
-      exit
-    end
-  }
-
-  daemon_main
-rescue => e
-  die e.message
+    end unless method_defined?(:daemon)
+  end
 end
 
 main()
