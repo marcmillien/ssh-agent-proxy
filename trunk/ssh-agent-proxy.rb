@@ -292,9 +292,13 @@ class SSHAuthClient
     list.delete(sock_file())
 
     list.delete_if { |path|
-      stat = File.stat(path)
+      begin
+        stat = File.stat(path)
 
-      !stat.socket? || !stat.owned?
+        !stat.socket? || !stat.owned?
+      rescue
+        true
+      end
     }
 
     return list
