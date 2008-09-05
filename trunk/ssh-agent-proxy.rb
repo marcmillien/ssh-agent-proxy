@@ -124,6 +124,80 @@ def daemon_main
   }
 end
 
+def daemon
+  Process.daemon unless $debug
+  File.umask(0)
+end
+
+def setup
+  setup_global_variables
+  setup_signal_handlers
+end
+
+def setup_global_variables
+  $sock_file_template = "/tmp/ssh%d/agent.sock"
+  $pid_file_template  = "/tmp/ssh%d/agent.pid"
+
+  $debug              = false
+  $csh                = false
+  $no_cleanup         = false
+  $quiet              = false
+end
+
+def setup_signal_handlers
+  [:SIGINT, :SIGQUIT, :SIGTERM].each { |sig|
+    trap(sig) do
+      cleanup
+      exit
+    end
+  }
+end
+
+def cleanup
+  return if $no_cleanup
+
+  [sock_file(), pid_file()].each { |path|
+    dir, file = File.split(path)
+
+    File.unlink(path) rescue nil
+    Dir.rmdir(dir) rescue nil
+  }
+end
+
+def sock_file
+  return $sock_file_template % Process.uid
+end
+
+def pid_file
+  return $pid_file_template % Process.uid
+end
+
+def create_pid_file
+  path = pid_file()
+
+  dir, file = File.split(path)
+
+  if File.directory?(dir)
+    File.chmod(0700, dir)
+  else
+    Dir.mkdir(dir, 0700)
+  end
+
+  File.open(path, "w") { |f|
+    f.puts Process.pid
+  }
+end
+
+def read_pid_file
+  File.open(pid_file()) { |f|
+    pid = f.gets.strip.to_i
+
+    return pid
+  }
+rescue => e
+  return nil
+end
+
 def debug(message)
   notice(message) if $debug
 end
@@ -137,17 +211,20 @@ def print_info(message)
   puts "echo " + "#{$0}: #{message}".shellescape + ";" unless $quiet
 end
 
+def print_env
+  if $csh
+    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file().shellescape
+  else
+    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file().shellescape
+  end
+end
+
 def die(message)
   notice(message)
 
   cleanup
 
   exit 255
-end
-
-def daemon
-  Process.daemon unless $debug
-  File.umask(0)
 end
 
 class SSHAuth
@@ -296,83 +373,6 @@ class SSHAuthServer
         end
       }
     }
-  end
-end
-
-def setup
-  setup_global_variables
-  setup_signal_handlers
-end
-
-def setup_global_variables
-  $sock_file_template = "/tmp/ssh%d/agent.sock"
-  $pid_file_template  = "/tmp/ssh%d/agent.pid"
-
-  $debug              = false
-  $csh                = false
-  $no_cleanup         = false
-  $quiet              = false
-end
-
-def cleanup
-  return if $no_cleanup
-
-  [sock_file(), pid_file()].each { |path|
-    dir, file = File.split(path)
-
-    File.unlink(path) rescue nil
-    Dir.rmdir(dir) rescue nil
-  }
-end
-
-def setup_signal_handlers
-  [:SIGINT, :SIGQUIT, :SIGTERM].each { |sig|
-    trap(sig) do
-      cleanup
-      exit
-    end
-  }
-end
-
-def sock_file
-  return $sock_file_template % Process.uid
-end
-
-def pid_file
-  return $pid_file_template % Process.uid
-end
-
-def create_pid_file
-  path = pid_file()
-
-  dir, file = File.split(path)
-
-  if File.directory?(dir)
-    File.chmod(0700, dir)
-  else
-    Dir.mkdir(dir, 0700)
-  end
-
-  File.open(path, "w") { |f|
-    f.puts Process.pid
-  }
-end
-
-def read_pid_file
-  File.open(pid_file()) { |f|
-    pid = f.gets.strip.to_i
-
-    return pid
-  }
-rescue => e
-  return nil
-end
-
-def print_env
-  if $csh
-    printf "setenv SSH_AUTH_SOCK %s;\n", sock_file().shellescape
-  else
-    printf "SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", sock_file().shellescape
   end
 end
 
