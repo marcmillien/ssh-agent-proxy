@@ -93,10 +93,10 @@ rescue => e
 end
 
 def daemon_main
-  auth = SSHAuth.new
+  client = SSHAuthClient.new
 
   begin
-    proxy = SSHAuthServer.new(sock_file())
+    server = SSHAuthServer.new(sock_file())
   rescue Errno::EADDRINUSE => e
     print_info "Agent already running"
 
@@ -115,10 +115,10 @@ def daemon_main
 
   create_pid_file
 
-  proxy.each { |accept_sock|
+  server.each { |accept_sock|
     debug "Connected"
 
-    auth.proxy(accept_sock)
+    client.proxy(accept_sock)
 
     debug "Disconnected"
   }
@@ -227,7 +227,7 @@ def die(message)
   exit 255
 end
 
-class SSHAuth
+class SSHAuthClient
   def open(&block)
     if block
       sock = open()
