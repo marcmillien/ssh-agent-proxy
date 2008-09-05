@@ -167,8 +167,8 @@ class SSHAuth
         debug "Trying: " + path
         begin
           stat = File.stat(path)
-          
-          if stat.socket? && stat.readable?
+
+          if stat.socket? && stat.owned?
             return UNIXSocket.open(path)
           end
         rescue => e
