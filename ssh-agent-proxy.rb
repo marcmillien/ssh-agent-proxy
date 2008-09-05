@@ -248,10 +248,18 @@ class SSHAuthClient
           if stat.socket? && stat.owned?
             return UNIXSocket.open(path)
           end
-        rescue => e
+        rescue => last_error
           debug "Failed"
-          File.chmod(0200, path) rescue nil
-          last_error = e
+          begin
+            File.unlink(path)
+            debug "Non-working socket removed"
+
+            if (dir = File.dirname(path)) && File.owned?(dir)
+              Dir.rmdir(dir)
+              debug "Empty parent directory removed"
+            end
+          rescue
+          end
         end
       }
 
@@ -282,6 +290,12 @@ class SSHAuthClient
 
     # never recurse itself
     list.delete(sock_file())
+
+    list.delete_if { |path|
+      stat = File.stat(path)
+
+      !stat.socket? || !stat.owned?
+    }
 
     return list
   end
