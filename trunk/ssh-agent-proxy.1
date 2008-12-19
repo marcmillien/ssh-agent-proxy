@@ -9,7 +9,7 @@
 .Xr ssh-agent 1
 .Sh SYNOPSIS
 .Nm
-.Op Fl cdkqs
+.Op Fl cdkqrs
 .Op Fl a Ar SOCK
 .Op Fl p Ar FILE
 .Sh DESCRIPTION
@@ -109,6 +109,9 @@ is replaced with the user ID.
 .Pp
 .It Fl q
 Supress informational messages.
+.Pp
+.It Fl r
+Kill the proxy agent if one is already running and restart a new one.
 .Pp
 .It Fl s
 Generate Bourne shell commands on stdout.  This is the default if
