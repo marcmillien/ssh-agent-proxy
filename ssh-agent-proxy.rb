@@ -39,7 +39,7 @@ def main
   setup
 
   OptionParser.new { |opt|
-    kill = false
+    kill = restart = false
 
     if shell = ENV['SHELL']
       $csh = shell.match(/csh$/)
@@ -61,6 +61,9 @@ def main
     opt.on('-q', 'Suppress informational messages') { |v|
       $quiet = v
     }
+    opt.on('-r', 'Restart the agent proxy') { |v|
+      restart = v
+    }
     opt.on('-s', 'Generate Bourne shell commands on stdout') { |v|
       $csh = !v
     }
@@ -70,7 +73,7 @@ def main
 
     opt.parse!(ARGV)
 
-    if kill
+    if kill || restart
       if pid = read_pid_file()
         begin
           Process.kill(:SIGTERM, pid)
@@ -83,7 +86,7 @@ def main
 
       cleanup
 
-      exit
+      exit unless restart
     end
   }
 
