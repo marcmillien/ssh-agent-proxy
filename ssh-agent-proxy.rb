@@ -252,7 +252,7 @@ class SSHAuthClient
             return UNIXSocket.open(path)
           end
         rescue => last_error
-          debug "Failed"
+          debug "Failed: #{e}"
           begin
             File.unlink(path)
             debug "Non-working socket removed"
@@ -332,11 +332,11 @@ class SSHAuthClient
               next
             end
 
-            debug "Data: " + buf.inspect
-
             if s.equal?(accept_sock)
+              debug "Data from client: " + buf.inspect
               client_sock.send(buf, 0)
             else
+              debug "Data from server: " + buf.inspect
               accept_sock.send(buf, 0)
             end
           }
