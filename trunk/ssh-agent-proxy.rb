@@ -231,6 +231,8 @@ def die(message)
 end
 
 class SSHAuthClient
+  class NoAgentError < StandardError; end
+
   def open(&block)
     if block
       sock = open()
@@ -267,7 +269,7 @@ class SSHAuthClient
       }
 
       if last_error.nil?
-        raise 'No agent socket available'
+        raise NoAgentError, 'No agent socket available'
       else
         raise last_error
       end
@@ -307,6 +309,15 @@ class SSHAuthClient
     return list
   end
 
+  SSH_AGENT_FAILURE = 5
+  SSH_AGENT_SUCCESS = 6
+
+  SSH_AGENTC_REQUEST_RSA_IDENTITIES = 1
+  SSH2_AGENTC_REQUEST_IDENTITIES    = 11
+
+  SSH_AGENT_RSA_IDENTITIES_ANSWER   = 2
+  SSH2_AGENT_IDENTITIES_ANSWER      = 12
+
   def proxy(accept_sock)
     open { |client_sock|
       loop {
@@ -321,29 +332,67 @@ class SSHAuthClient
           end
         end
 
+        next if reads.nil?
+
         eof = false
 
-        if !reads.nil?
-          reads.each { |s|
-            buf, = s.recvfrom(4096)
+        reads.each { |s|
+          buf = s.recv(4096)
 
-            if buf.empty?
-              eof = true
-              next
-            end
+          if buf.empty?
+            eof = true
+            next
+          end
 
-            if s.equal?(accept_sock)
-              debug "Data from client: " + buf.inspect
-              client_sock.send(buf, 0)
-            else
-              debug "Data from server: " + buf.inspect
-              accept_sock.send(buf, 0)
-            end
-          }
+          if s.equal?(accept_sock)
+            debug "Request from client: " + buf.inspect
+            client_sock.send(buf, 0)
+          else
+            debug "Response from server: " + buf.inspect
+            accept_sock.send(buf, 0)
+          end
+        }
 
-          break if eof
-        end
+        break if eof
       }
+    }
+  rescue NoAgentError
+    loop {
+      reads, writes, errors = IO.select([accept_sock],
+                                        nil,
+                                        [accept_sock], 1)
+
+      if !errors.nil?
+        if !errors.empty?
+          debug "Socket error"
+          break
+        end
+      end
+
+      next if reads.nil?
+
+      req_len_packed = accept_sock.read(4) or break
+
+      req_len = req_len_packed.unpack('N').first
+      req_message = accept_sock.read(req_len)
+      req = [req_len, req_message].pack('Na*')
+      req_type, req_data = req_message.unpack('Ca*')
+
+      debug "Request from client: " + req.inspect
+
+      case req_type
+      when SSH_AGENTC_REQUEST_RSA_IDENTITIES
+        res_message = [SSH_AGENT_RSA_IDENTITIES_ANSWER, 0].pack('CN')
+      when SSH2_AGENTC_REQUEST_IDENTITIES
+        res_message = [SSH2_AGENT_IDENTITIES_ANSWER, 0].pack('CN')
+      else
+        res_message = [SSH_AGENT_FAILURE].pack('C')
+      end
+
+      res = [res_message.size, res_message].pack('Na*')
+
+      debug "Response: " + res.inspect
+      accept_sock.send(res, 0)
     }
   end
 end
