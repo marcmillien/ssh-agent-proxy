@@ -20,10 +20,11 @@ command is a
 proxy for
 .Xr ssh-agent 1 ,
 which itself acts as an ssh authentication agent that forwards
-requests to a real agent.  For each client request, it determines the
+requests to a real agent.  For each client request, it looks for a
 .Sq real
-agent by testing all available unix-domain sockets presumably opened
-by ssh-agents one by one.
+agent by testing every available unix-domain socket that are
+presumably opened by ssh-agent and owned by the running user.  If it
+finds one, proxies client requests to the socket.
 .Pp
 This is especially useful when you use
 .Xr screen 1
